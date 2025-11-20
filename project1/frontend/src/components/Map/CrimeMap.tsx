@@ -1,54 +1,84 @@
-import { useEffect, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { CrimeHotspot, CrimeIncident } from '../../types';
+import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-interface CrimeMapProps {
-  hotspots: CrimeHotspot[];
-  incidents?: CrimeIncident[];
-  center?: [number, number];
-  zoom?: number;
-  showIncidents?: boolean;
-  onLocationClick?: (lat: number, lng: number) => void;
-  userLocation?: [number, number];
+interface BackendHotspot {
+  cluster_id: number;
+  lat: number;
+  lng: number;
+  count: number;
+  intensity: number;
 }
 
-const riskColors = {
-  low: '#28A745',
-  moderate: '#FFC107',
-  high: '#FF8C00',
-  critical: '#DC3545'
+// Risk Level Based on Cluster Intensity
+const riskColors: Record<'low' | 'moderate' | 'high' | 'critical', string> = {
+  low: "#28A745",
+  moderate: "#FFC107",
+  high: "#FF8C00",
+  critical: "#DC3545",
 };
 
-export function CrimeMap({
-  hotspots,
-  incidents = [],
-  center = [19.0760, 72.8777],
-  zoom = 12,
-  showIncidents = false,
-  onLocationClick,
-  userLocation
-}: CrimeMapProps) {
+function getRiskLevel(intensity: number) {
+  if (intensity > 200) return "critical";
+  if (intensity > 100) return "high";
+  if (intensity > 40) return "moderate";
+  return "low";
+}
+
+export function CrimeMap() {
+  const [hotspots, setHotspots] = useState<BackendHotspot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.Layer[]>([]);
 
+  // ------------------------------------
+  // FETCH HOTSPOTS FROM BACKEND
+  // ------------------------------------
+  const fetchHotspots = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/getHeatmap");
+
+      if (!res.ok) throw new Error("Backend Error");
+
+      const data = await res.json();
+
+      if (data.hotspots) {
+        setHotspots(data.hotspots);
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Heatmap Fetch Failed:", err);
+      setError("Unable to load hotspot data from backend.");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHotspots();
+
+    // OPTIONAL: Auto refresh every 20 seconds
+    const interval = setInterval(fetchHotspots, 20000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ------------------------------------
+  // INITIALIZE MAP
+  // ------------------------------------
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      attributionControl: false
-    }).setView(center, zoom);
+      attributionControl: false,
+    }).setView([12.9716, 77.5946], 12); // Bangalore
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(map);
-
-    if (onLocationClick) {
-      map.on('click', (e) => {
-        onLocationClick(e.latlng.lat, e.latlng.lng);
-      });
-    }
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      { maxZoom: 19 }
+    ).addTo(map);
 
     mapRef.current = map;
 
@@ -58,117 +88,86 @@ export function CrimeMap({
     };
   }, []);
 
+  // ------------------------------------
+  // RENDER HOTSPOTS ON MAP
+  // ------------------------------------
   useEffect(() => {
     if (!mapRef.current) return;
 
-    markersRef.current.forEach(marker => {
-      mapRef.current?.removeLayer(marker);
-    });
+    // Remove previous markers
+    markersRef.current.forEach((layer) => mapRef.current?.removeLayer(layer));
     markersRef.current = [];
 
-    hotspots.forEach(hotspot => {
-      const circle = L.circle([hotspot.centerLat, hotspot.centerLng], {
-        color: riskColors[hotspot.riskLevel],
-        fillColor: riskColors[hotspot.riskLevel],
-        fillOpacity: 0.35,
-        radius: hotspot.radiusMeters,
-        weight: 2
-      }).addTo(mapRef.current!);
+    hotspots.forEach((h) => {
+      const riskLevel = getRiskLevel(h.intensity);
+      const radius = Math.min(300 + h.intensity * 3, 2000);
 
       const popupContent = `
-        <div style="color: #1A1A2E; min-width: 200px;">
-          <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold; text-transform: uppercase; color: ${riskColors[hotspot.riskLevel]};">
-            ${hotspot.riskLevel} Risk
+        <div style="color:#1A1A2E; min-width:180px;">
+          <h3 style="margin:0 0 6px 0; font-size:14px; font-weight:bold; text-transform:uppercase; color:${riskColors[riskLevel]};">
+            ${riskLevel} RISK ZONE
           </h3>
-          <div style="font-size: 12px; line-height: 1.6;">
-            <p style="margin: 4px 0;"><strong>Risk Score:</strong> ${hotspot.riskScore}/100</p>
-            <p style="margin: 4px 0;"><strong>Confidence:</strong> ${(hotspot.confidence * 100).toFixed(0)}%</p>
-            <p style="margin: 4px 0;"><strong>Active Until:</strong> ${hotspot.activeUntil.toLocaleTimeString()}</p>
-            <p style="margin: 4px 0;"><strong>Predicted Types:</strong><br/>
-              ${hotspot.predictedCrimeTypes.map(t => `<span style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px; margin: 2px; display: inline-block;">${t}</span>`).join('')}
-            </p>
-            <p style="margin: 8px 0 4px 0; font-weight: bold;">Contributing Factors:</p>
-            <p style="margin: 2px 0; font-size: 11px;">Historical Crimes: ${hotspot.factors.historicalCrimes}</p>
-          </div>
+          <p><strong>Incidents:</strong> ${h.count}</p>
+          <p><strong>Coordinates:</strong> ${h.lat.toFixed(4)}, ${h.lng.toFixed(4)}</p>
+          <p><strong>Cluster ID:</strong> ${h.cluster_id}</p>
         </div>
       `;
 
-      circle.bindPopup(popupContent);
+      // Circle
+      const circle = L.circle([h.lat, h.lng], {
+        color: riskColors[riskLevel],
+        fillColor: riskColors[riskLevel],
+        fillOpacity: 0.35,
+        radius,
+        weight: 2,
+      })
+        .addTo(mapRef.current!)
+        .bindPopup(popupContent);
+
       markersRef.current.push(circle);
 
-      const marker = L.circleMarker([hotspot.centerLat, hotspot.centerLng], {
-        radius: 8,
-        fillColor: riskColors[hotspot.riskLevel],
-        color: '#fff',
+      // Center point
+      const marker = L.circleMarker([h.lat, h.lng], {
+        radius: 7,
+        fillColor: riskColors[riskLevel],
+        color: "#fff",
         weight: 2,
-        opacity: 1,
-        fillOpacity: 1
-      }).addTo(mapRef.current!);
+        fillOpacity: 1,
+      })
+        .addTo(mapRef.current!)
+        .bindPopup(popupContent);
 
-      marker.bindPopup(popupContent);
       markersRef.current.push(marker);
     });
+  }, [hotspots]);
 
-    if (showIncidents && incidents.length > 0) {
-      const incidentColors = {
-        violent: '#FF4136',
-        property: '#FF8C00',
-        disorder: '#8A2BE2',
-        traffic: '#4A90E2',
-        other: '#B0BEC5'
-      };
+  // ------------------------------------
+  // UI STATES
+  // ------------------------------------
+  if (loading) {
+    return (
+      <div className="text-center p-4 text-gray-300">
+        Loading crime heatmap...
+      </div>
+    );
+  }
 
-      incidents.forEach(incident => {
-        const marker = L.circleMarker([incident.latitude, incident.longitude], {
-          radius: 4,
-          fillColor: incidentColors[incident.incidentType],
-          color: '#fff',
-          weight: 1,
-          opacity: 0.8,
-          fillOpacity: 0.6
-        }).addTo(mapRef.current!);
+  if (error) {
+    return (
+      <div className="text-center p-4 text-red-500">
+        {error}
+      </div>
+    );
+  }
 
-        const popupContent = `
-          <div style="color: #1A1A2E; min-width: 180px; font-size: 12px;">
-            <h4 style="margin: 0 0 6px 0; text-transform: capitalize;">${incident.incidentType} Crime</h4>
-            <p style="margin: 2px 0;"><strong>Severity:</strong> ${incident.severity}</p>
-            <p style="margin: 2px 0;"><strong>Date:</strong> ${incident.occurredAt.toLocaleDateString()}</p>
-            <p style="margin: 2px 0;"><strong>Time:</strong> ${incident.occurredAt.toLocaleTimeString()}</p>
-            ${incident.locationDescription ? `<p style="margin: 2px 0;"><strong>Location:</strong> ${incident.locationDescription}</p>` : ''}
-          </div>
-        `;
-
-        marker.bindPopup(popupContent);
-        markersRef.current.push(marker);
-      });
-    }
-
-    if (userLocation) {
-      const userMarker = L.marker(userLocation, {
-        icon: L.divIcon({
-          className: 'user-location-marker',
-          html: `<div style="
-            width: 20px;
-            height: 20px;
-            background: #00BFFF;
-            border: 3px solid #fff;
-            border-radius: 50%;
-            box-shadow: 0 0 10px rgba(0, 191, 255, 0.8);
-          "></div>`,
-          iconSize: [20, 20],
-          iconAnchor: [10, 10]
-        })
-      }).addTo(mapRef.current!);
-
-      markersRef.current.push(userMarker);
-    }
-  }, [hotspots, incidents, showIncidents, userLocation]);
-
+  // ------------------------------------
+  // COMPONENT RENDER
+  // ------------------------------------
   return (
     <div
       ref={containerRef}
-      className="w-full h-full rounded-lg overflow-hidden shadow-xl"
-      style={{ minHeight: '400px' }}
+      className="w-full h-full rounded-lg overflow-hidden shadow-lg"
+      style={{ minHeight: "500px" }}
     />
   );
 }
