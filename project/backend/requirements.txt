@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+firebase-admin
+pydantic
+numpy
+pandas
+geopandas
+shapely
+scikit-learn
+prophet
+xgboost
+matplotlib
