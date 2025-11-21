@@ -1,211 +1,218 @@
-import { Navigation, MapPin, Clock, TrendingUp } from 'lucide-react';
-import { CrimeHotspot } from '../../types';
+import { useEffect, useState, useRef } from "react";
+import {
+  GoogleMap,
+  Marker,
+  Polyline,
+  DirectionsRenderer,
+  useLoadScript,
+} from "@react-google-maps/api";
+
+interface Hotspot {
+  lat: number;
+  lng: number;
+  radius: number;
+  intensity: number;
+}
+
+interface RawHotspot {
+  center?: { lat?: number; lng?: number };
+  lat?: number;
+  lng?: number;
+  radius?: number;
+  intensity?: number;
+  count?: number;
+}
+
+interface RoutePoint {
+  lat: number;
+  lng: number;
+}
 
 interface SafeRoutesProps {
-  hotspots: CrimeHotspot[];
   userLocation: [number, number];
 }
 
-interface Route {
-  id: string;
-  name: string;
-  destination: string;
-  distance: string;
-  estimatedTime: string;
-  safetyScore: number;
-  avoidedHotspots: number;
-}
+export default function SafeRoutes({ userLocation }: SafeRoutesProps) {
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: ["geometry"],
+  });
 
-export function SafeRoutes({ hotspots, userLocation }: SafeRoutesProps) {
-  const mockRoutes: Route[] = [
-    {
-      id: 'route-1',
-      name: 'Main Highway Route',
-      destination: 'Bandra West',
-      distance: '8.5 km',
-      estimatedTime: '22 min',
-      safetyScore: 95,
-      avoidedHotspots: 3
-    },
-    {
-      id: 'route-2',
-      name: 'Coastal Road',
-      destination: 'Bandra West',
-      distance: '9.2 km',
-      estimatedTime: '25 min',
-      safetyScore: 88,
-      avoidedHotspots: 2
-    },
-    {
-      id: 'route-3',
-      name: 'Inner City Route',
-      destination: 'Bandra West',
-      distance: '7.8 km',
-      estimatedTime: '28 min',
-      safetyScore: 72,
-      avoidedHotspots: 1
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [origin, setOrigin] = useState<string>("");
+  const [destination, setDestination] = useState<string>("");
+
+  const [safeRoute, setSafeRoute] = useState<RoutePoint[]>([]);
+  const [googleRoute, setGoogleRoute] =
+    useState<google.maps.DirectionsResult | null>(null);
+
+  // -------------------------------
+  // FETCH HOTSPOTS
+  // -------------------------------
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/getHeatmap")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.hotspots) return;
+
+        const formatted: Hotspot[] = data.hotspots.map((h: RawHotspot) => ({
+          lat: h.center?.lat ?? h.lat ?? 0,
+          lng: h.center?.lng ?? h.lng ?? 0,
+          radius: h.radius ?? 150,
+          intensity: h.intensity ?? h.count ?? 1,
+        }));
+
+        setHotspots(formatted);
+      })
+      .catch((err) => console.error("Hotspot Fetch Error:", err));
+  }, []);
+
+  // -------------------------------
+  // HANDLE SAFE ROUTE (backend A*)
+  // -------------------------------
+  const fetchSafeRoute = async () => {
+    try {
+      const startSplit = origin.split(",").map(Number);
+      const endSplit = destination.split(",").map(Number);
+
+      const res = await fetch("http://127.0.0.1:8000/api/routing/safeRoute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          start: startSplit,
+          end: endSplit,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.points) {
+        alert("No safe route found");
+        return;
+      }
+
+      setSafeRoute(data.points);
+    } catch (err) {
+      console.error(err);
+      alert("Safe route calculation failed.");
     }
-  ];
-
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-[#28A745]';
-    if (score >= 75) return 'text-[#FFC107]';
-    return 'text-[#FF8C00]';
   };
 
-  const getScoreBg = (score: number) => {
-    if (score >= 90) return 'bg-[#28A745]';
-    if (score >= 75) return 'bg-[#FFC107]';
-    return 'bg-[#FF8C00]';
+  // -------------------------------
+  // GOOGLE MAPS DIRECTIONS ROUTE
+  // -------------------------------
+  const fetchGoogleRoute = () => {
+    if (!origin || !destination) return;
+
+    const dirService = new google.maps.DirectionsService();
+
+    dirService.route(
+      {
+        origin,
+        destination,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK) {
+          setGoogleRoute(result);
+        } else {
+          console.error("Google Directions Error:", status);
+        }
+      }
+    );
   };
+
+  if (!isLoaded) return <div className="p-4">Loading map...</div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Recommended Safe Routes</h2>
-        <button className="px-4 py-2 bg-[#00BFFF] hover:bg-[#0099CC] text-white rounded-lg font-medium transition-colors">
-          Set Destination
+    <div>
+      {/* Input Section */}
+      <div className="flex gap-4 mb-4">
+        <input
+          className="p-2 rounded bg-gray-800 text-white w-full"
+          placeholder="Start (lat,lng)"
+          value={origin}
+          onChange={(e) => setOrigin(e.target.value)}
+        />
+        <input
+          className="p-2 rounded bg-gray-800 text-white w-full"
+          placeholder="Destination (lat,lng)"
+          value={destination}
+          onChange={(e) => setDestination(e.target.value)}
+        />
+
+        <button
+          onClick={() => {
+            fetchSafeRoute();
+            fetchGoogleRoute();
+          }}
+          className="px-4 py-2 bg-blue-500 rounded text-white"
+        >
+          GO
         </button>
       </div>
 
-      <div className="bg-[#1A1A2E] rounded-lg p-6 border border-gray-700">
-        <div className="flex items-center gap-3 mb-4">
-          <MapPin className="w-5 h-5 text-[#00BFFF]" />
-          <div>
-            <p className="text-sm text-gray-400">Current Location</p>
-            <p className="text-white font-medium">
-              {userLocation[0].toFixed(4)}, {userLocation[1].toFixed(4)}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Enter destination address..."
-            className="flex-1 px-4 py-2 bg-[#1B263B] border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00BFFF] focus:border-transparent"
+      {/* MAP */}
+      <GoogleMap
+        zoom={13}
+        center={{ lat: userLocation[0], lng: userLocation[1] }}
+        mapContainerStyle={{ width: "100%", height: "550px", borderRadius: "10px" }}
+        onLoad={(map) => {
+          mapRef.current = map;
+        }}
+        options={{
+          disableDefaultUI: false,
+          zoomControl: true,
+          mapTypeId: "roadmap",
+        }}
+      >
+        {/* User Location */}
+        <Marker
+          position={{
+            lat: userLocation[0],
+            lng: userLocation[1],
+          }}
+        />
+
+        {/* Google Maps Suggested Route */}
+        {googleRoute && (
+          <DirectionsRenderer
+            directions={googleRoute}
+            options={{
+              polylineOptions: {
+                strokeColor: "#00BFFF",
+                strokeOpacity: 0.9,
+                strokeWeight: 5,
+              },
+            }}
           />
-          <button className="px-6 py-2 bg-[#28A745] hover:bg-[#218838] text-white rounded-lg font-medium transition-colors">
-            Find Routes
-          </button>
-        </div>
-      </div>
+        )}
 
-      <div className="space-y-4">
-        {mockRoutes.map((route, index) => (
-          <div key={route.id} className="bg-[#1A1A2E] rounded-lg p-6 border border-gray-700 hover:border-[#00BFFF] transition-colors">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 ${index === 0 ? 'bg-[#28A745]' : 'bg-[#00BFFF]'} bg-opacity-20 rounded-lg flex items-center justify-center`}>
-                  <Navigation className={`w-6 h-6 ${index === 0 ? 'text-[#28A745]' : 'text-[#00BFFF]'}`} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-1">{route.name}</h3>
-                  <p className="text-sm text-gray-400">{route.destination}</p>
-                  {index === 0 && (
-                    <span className="inline-block mt-2 px-2 py-1 bg-[#28A745] text-white text-xs font-semibold rounded">
-                      RECOMMENDED
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className={`text-3xl font-bold ${getScoreColor(route.safetyScore)}`}>
-                  {route.safetyScore}
-                </div>
-                <p className="text-xs text-gray-400">Safety Score</p>
-              </div>
-            </div>
+        {/* SAFE ROUTE (our backend A* path) */}
+        {safeRoute.length > 1 && (
+          <Polyline
+            path={safeRoute.map((p) => ({ lat: p.lat, lng: p.lng }))}
+            options={{
+              strokeColor: "#00FF00",
+              strokeOpacity: 1,
+              strokeWeight: 6,
+            }}
+          />
+        )}
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-xs text-gray-400">Distance</p>
-                  <p className="text-sm text-white font-medium">{route.distance}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-xs text-gray-400">Est. Time</p>
-                  <p className="text-sm text-white font-medium">{route.estimatedTime}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-xs text-gray-400">Avoided Risks</p>
-                  <p className="text-sm text-white font-medium">{route.avoidedHotspots} hotspots</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-400">Safety Rating</span>
-                <span className="text-xs text-gray-400">{route.safetyScore}%</span>
-              </div>
-              <div className="w-full bg-[#1B263B] rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${getScoreBg(route.safetyScore)}`}
-                  style={{ width: `${route.safetyScore}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button className="flex-1 px-4 py-2 bg-[#00BFFF] hover:bg-[#0099CC] text-white rounded-lg text-sm font-medium transition-colors">
-                Start Navigation
-              </button>
-              <button className="px-4 py-2 bg-[#1B263B] hover:bg-[#1A1A2E] text-white border border-gray-700 rounded-lg text-sm font-medium transition-colors">
-                View Details
-              </button>
-            </div>
-          </div>
+        {/* DANGER HOTSPOTS */}
+        {hotspots.map((h, i) => (
+          <Marker
+            key={i}
+            position={{ lat: h.lat, lng: h.lng }}
+            icon={{
+              url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+              scaledSize: new google.maps.Size(40, 40),
+            }}
+          />
         ))}
-      </div>
-
-      <div className="bg-[#1A1A2E] rounded-lg p-6 border border-gray-700">
-        <h3 className="text-lg font-semibold text-white mb-4">Route Safety Features</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-[#28A745] bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Navigation className="w-4 h-4 text-[#28A745]" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-white text-sm mb-1">Hotspot Avoidance</h4>
-              <p className="text-xs text-gray-400">Routes avoid high-crime areas automatically</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-[#4A90E2] bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Clock className="w-4 h-4 text-[#4A90E2]" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-white text-sm mb-1">Real-time Updates</h4>
-              <p className="text-xs text-gray-400">Routes adjust based on current risk levels</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-[#FFC107] bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <MapPin className="w-4 h-4 text-[#FFC107]" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-white text-sm mb-1">Well-lit Paths</h4>
-              <p className="text-xs text-gray-400">Prioritizes well-lit, populated routes</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-[#00BFFF] bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-4 h-4 text-[#00BFFF]" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-white text-sm mb-1">Safety Score</h4>
-              <p className="text-xs text-gray-400">AI-calculated safety rating for each route</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      </GoogleMap>
     </div>
   );
 }

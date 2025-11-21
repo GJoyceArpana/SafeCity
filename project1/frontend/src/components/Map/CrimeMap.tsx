@@ -1,173 +1,154 @@
-import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+// frontend/src/components/Map/CrimeMap.tsx
+import React from "react";
+import {
+  GoogleMap,
+  Marker,
+  HeatmapLayer,
+  useLoadScript,
+} from "@react-google-maps/api";
 
-interface BackendHotspot {
-  cluster_id: number;
-  lat: number;
-  lng: number;
-  count: number;
-  intensity: number;
+// --------------------------------------------
+// FIX GLOBAL google TYPE for TypeScript
+// --------------------------------------------
+declare global {
+  interface Window {
+    google: typeof google | undefined;
+  }
 }
 
-// Risk Level Based on Cluster Intensity
-const riskColors: Record<'low' | 'moderate' | 'high' | 'critical', string> = {
-  low: "#28A745",
-  moderate: "#FFC107",
-  high: "#FF8C00",
-  critical: "#DC3545",
+// --------------------------------------------
+// BACKEND HOTSPOT TYPE
+// --------------------------------------------
+export interface BackendHotspot {
+  cluster_id?: number;
+
+  // Accept both formats returned by your Python backend
+  lat?: number;
+  lng?: number;
+  center?: { lat: number; lng: number };
+
+  intensity?: number;
+  count?: number;
+
+  radius?: number;
+}
+
+interface CrimeMapProps {
+  hotspots: BackendHotspot[];
+  userLocation: [number, number];
+  zoom?: number;
+}
+
+// --------------------------------------------
+// MAP CONTAINER
+// --------------------------------------------
+const containerStyle: React.CSSProperties = {
+  width: "100%",
+  height: "520px",
+  borderRadius: "12px",
 };
 
-function getRiskLevel(intensity: number) {
-  if (intensity > 200) return "critical";
-  if (intensity > 100) return "high";
-  if (intensity > 40) return "moderate";
-  return "low";
-}
+// --------------------------------------------
+// DARK MAP THEME (Google typed)
+// --------------------------------------------
+const darkMapTheme: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#0b1220" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0b1220" }] },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#1d2a44" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#0a1a2b" }],
+  },
+];
 
-export function CrimeMap() {
-  const [hotspots, setHotspots] = useState<BackendHotspot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+// --------------------------------------------
+// HEATMAP GRADIENT
+// --------------------------------------------
+const heatmapGradient = [
+  "rgba(0,0,0,0)",
+  "rgba(0,255,255,1)",
+  "rgba(0,170,255,1)",
+  "rgba(0,120,255,1)",
+  "rgba(255,200,0,1)",
+  "rgba(255,100,0,1)",
+  "rgba(255,0,0,1)",
+];
 
-  const mapRef = useRef<L.Map | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const markersRef = useRef<L.Layer[]>([]);
+// --------------------------------------------
+// MAIN COMPONENT
+// --------------------------------------------
+export function CrimeMap({ hotspots, userLocation, zoom = 12 }: CrimeMapProps) {
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: ["visualization"],
+  });
 
-  // ------------------------------------
-  // FETCH HOTSPOTS FROM BACKEND
-  // ------------------------------------
-  const fetchHotspots = async () => {
-    try {
-      const res = await fetch("http://127.0.0.1:8000/getHeatmap");
+  if (loadError) {
+    return <div className="p-4 text-red-500">❌ Failed to load Google Maps</div>;
+  }
 
-      if (!res.ok) throw new Error("Backend Error");
+  if (!isLoaded) {
+    return <div className="p-4 text-gray-300">⏳ Loading map…</div>;
+  }
 
-      const data = await res.json();
+  // --------------------------------------------
+  // NORMALIZE HOTSPOT DATA FOR GOOGLE HEATMAP
+  // --------------------------------------------
+  const heatmapData: google.maps.visualization.WeightedLocation[] =
+    hotspots.map((h) => {
+      const lat = h.center?.lat ?? h.lat ?? 0;
+      const lng = h.center?.lng ?? h.lng ?? 0;
 
-      if (data.hotspots) {
-        setHotspots(data.hotspots);
-      }
+      // Choose intensity or fall back to count
+      const raw = h.intensity ?? h.count ?? 1;
 
-      setLoading(false);
-    } catch (err) {
-      console.error("Heatmap Fetch Failed:", err);
-      setError("Unable to load hotspot data from backend.");
-      setLoading(false);
-    }
-  };
+      // Weight scaling ensures visible hotspots
+      const weight = Math.max(5, Math.min(250, raw * 0.8));
 
-  useEffect(() => {
-    fetchHotspots();
-
-    // OPTIONAL: Auto refresh every 20 seconds
-    const interval = setInterval(fetchHotspots, 20000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // ------------------------------------
-  // INITIALIZE MAP
-  // ------------------------------------
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-
-    const map = L.map(containerRef.current, {
-      attributionControl: false,
-    }).setView([12.9716, 77.5946], 12); // Bangalore
-
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      { maxZoom: 19 }
-    ).addTo(map);
-
-    mapRef.current = map;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
-  // ------------------------------------
-  // RENDER HOTSPOTS ON MAP
-  // ------------------------------------
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    // Remove previous markers
-    markersRef.current.forEach((layer) => mapRef.current?.removeLayer(layer));
-    markersRef.current = [];
-
-    hotspots.forEach((h) => {
-      const riskLevel = getRiskLevel(h.intensity);
-      const radius = Math.min(300 + h.intensity * 3, 2000);
-
-      const popupContent = `
-        <div style="color:#1A1A2E; min-width:180px;">
-          <h3 style="margin:0 0 6px 0; font-size:14px; font-weight:bold; text-transform:uppercase; color:${riskColors[riskLevel]};">
-            ${riskLevel} RISK ZONE
-          </h3>
-          <p><strong>Incidents:</strong> ${h.count}</p>
-          <p><strong>Coordinates:</strong> ${h.lat.toFixed(4)}, ${h.lng.toFixed(4)}</p>
-          <p><strong>Cluster ID:</strong> ${h.cluster_id}</p>
-        </div>
-      `;
-
-      // Circle
-      const circle = L.circle([h.lat, h.lng], {
-        color: riskColors[riskLevel],
-        fillColor: riskColors[riskLevel],
-        fillOpacity: 0.35,
-        radius,
-        weight: 2,
-      })
-        .addTo(mapRef.current!)
-        .bindPopup(popupContent);
-
-      markersRef.current.push(circle);
-
-      // Center point
-      const marker = L.circleMarker([h.lat, h.lng], {
-        radius: 7,
-        fillColor: riskColors[riskLevel],
-        color: "#fff",
-        weight: 2,
-        fillOpacity: 1,
-      })
-        .addTo(mapRef.current!)
-        .bindPopup(popupContent);
-
-      markersRef.current.push(marker);
+      return {
+        location: new google.maps.LatLng(lat, lng),
+        weight,
+      };
     });
-  }, [hotspots]);
 
-  // ------------------------------------
-  // UI STATES
-  // ------------------------------------
-  if (loading) {
-    return (
-      <div className="text-center p-4 text-gray-300">
-        Loading crime heatmap...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center p-4 text-red-500">
-        {error}
-      </div>
-    );
-  }
-
-  // ------------------------------------
-  // COMPONENT RENDER
-  // ------------------------------------
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full rounded-lg overflow-hidden shadow-lg"
-      style={{ minHeight: "500px" }}
-    />
+    <GoogleMap
+      zoom={zoom}
+      center={{ lat: userLocation[0], lng: userLocation[1] }}
+      mapContainerStyle={containerStyle}
+      options={{
+        styles: darkMapTheme,
+        disableDefaultUI: true,
+        zoomControl: true,
+        fullscreenControl: false,
+      }}
+    >
+      {/* USER MARKER */}
+      <Marker
+        position={{ lat: userLocation[0], lng: userLocation[1] }}
+        icon={{
+          url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+          scaledSize: new google.maps.Size(36, 36),
+        }}
+      />
+
+      {/* HEATMAP LAYER */}
+      {heatmapData.length > 0 && (
+        <HeatmapLayer
+          data={heatmapData}
+          options={{
+            radius: 40,
+            opacity: 0.85,
+            gradient: heatmapGradient,
+          }}
+        />
+      )}
+    </GoogleMap>
   );
 }
