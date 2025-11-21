@@ -4,16 +4,21 @@ from sklearn.cluster import DBSCAN
 import json
 import os
 
-DATA_PATH = "backend/ml/data/bangalore_merged_crime_dataset_new.csv"
-OUTPUT_PATH = "backend/ml/output/hotspots.json"
+# ----------------------------------------------------------------------------------
+# FIX: Corrected DATA_PATH and OUTPUT_PATH to be relative to the 'backend' folder
+# ----------------------------------------------------------------------------------
+DATA_PATH = "ml/data/bangalore_merged_crime_dataset_new.csv"
+OUTPUT_PATH = "ml/output/hotspots.json"
 
 def run_dbscan(eps=0.0035, min_samples=8):
+    # 1. Load Data
     df = pd.read_csv(DATA_PATH)
     df = df.dropna(subset=["latitude", "longitude"])
 
     coords = df[["latitude", "longitude"]].to_numpy()
     coords_radians = np.radians(coords)
 
+    # 2. Run DBSCAN Clustering (geographical data uses 'haversine' metric)
     db = DBSCAN(
         eps=eps,
         min_samples=min_samples,
@@ -23,9 +28,11 @@ def run_dbscan(eps=0.0035, min_samples=8):
     df["cluster"] = db.labels_
     clusters = []
 
+    # 3. Process Clusters and calculate center/intensity
     for label in sorted(set(db.labels_)):
         if label == -1:
-            continue
+            continue # Ignore noise points
+
         cluster_df = df[df["cluster"] == label]
         center_lat = cluster_df["latitude"].mean()
         center_lng = cluster_df["longitude"].mean()
@@ -39,6 +46,7 @@ def run_dbscan(eps=0.0035, min_samples=8):
             "intensity": float(intensity)
         })
 
+    # 4. Save output JSON
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
         json.dump(clusters, f, indent=2)
