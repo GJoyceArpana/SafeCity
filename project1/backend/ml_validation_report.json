@@ -1,0 +1,44 @@
+{
+  "all_authenticated": true,
+  "timestamp": "2025-11-21T22:43:29.879964",
+  "validations": {
+    "crime_dataset": {
+      "passed": true,
+      "message": "\u2705 Crime dataset validated: 12000 records"
+    },
+    "hotspots": {
+      "passed": true,
+      "message": "\u2705 Hotspots validated: 1 clusters"
+    },
+    "predictions": {
+      "passed": true,
+      "message": "\u2705 Predictions validated: 10 wards"
+    }
+  },
+  "details": {
+    "crime_dataset": {
+      "status": "valid",
+      "path": "C:\\Users\\Joyce\\Downloads\\SafeCity\\SafeCity\\project1\\backend\\ml\\data\\bangalore_merged_crime_dataset_new.csv",
+      "total_records": 12000,
+      "date_range": "2025-03-25 to 2025-11-20",
+      "coordinates_valid": "100.0%",
+      "wards_count": 10
+    },
+    "hotspots": {
+      "status": "valid",
+      "path": "C:\\Users\\Joyce\\Downloads\\SafeCity\\SafeCity\\project1\\backend\\ml\\output\\hotspots.json",
+      "clusters_count": 1,
+      "total_crime_density": 12000,
+      "algorithm": "DBSCAN (Haversine)",
+      "authenticated": true
+    },
+    "predictions": {
+      "status": "valid",
+      "path": "C:\\Users\\Joyce\\Downloads\\SafeCity\\SafeCity\\project1\\backend\\ml\\output\\predictions.json",
+      "wards_count": 10,
+      "total_forecasts": 70,
+      "algorithm": "Facebook Prophet",
+      "authenticated": true
+    }
+  }
+}

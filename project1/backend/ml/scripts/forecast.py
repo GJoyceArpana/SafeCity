@@ -4,8 +4,8 @@ import json
 import os
 from datetime import datetime, timedelta
 
-DATA_PATH = "backend/ml/data/bangalore_merged_crime_dataset_new.csv"
-OUTPUT_PATH = "backend/ml/output/predictions.json"
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "bangalore_merged_crime_dataset_new.csv")
+OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "output", "predictions.json")
 
 try:
     from prophet import Prophet

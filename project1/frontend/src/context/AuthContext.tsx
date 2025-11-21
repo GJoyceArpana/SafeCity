@@ -7,6 +7,8 @@ interface SignupPayload {
   email: string;
   password: string;
   role: 'police' | 'citizen';
+  badgeNumber?: string;
+  department?: string;
 }
 
 interface AuthContextType {

@@ -10,3 +10,6 @@ scikit-learn
 prophet
 xgboost
 matplotlib
+openai
+python-multipart
+requests

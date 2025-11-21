@@ -10,6 +10,8 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'police' | 'citizen'>('citizen');
+  const [badgeNumber, setBadgeNumber] = useState('');
+  const [department, setDepartment] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login, signup } = useAuth();
@@ -33,7 +35,8 @@ export function LoginPage() {
           phone,
           email,
           password,
-          role
+          role,
+          ...(role === 'police' && { badgeNumber, department })
         });
       } else {
         await login(email, password, role);
@@ -119,6 +122,36 @@ export function LoginPage() {
                     required
                   />
                 </div>
+                {role === 'police' && (
+                  <>
+                    <div>
+                      <label htmlFor="badgeNumber" className="block text-sm font-medium text-gray-300 mb-2">
+                        Badge Number
+                      </label>
+                      <input
+                        id="badgeNumber"
+                        type="text"
+                        value={badgeNumber}
+                        onChange={(e) => setBadgeNumber(e.target.value)}
+                        className="w-full px-4 py-2 bg-[#1A1A2E] border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00BFFF] focus:border-transparent"
+                        placeholder="Enter badge number"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="department" className="block text-sm font-medium text-gray-300 mb-2">
+                        Department
+                      </label>
+                      <input
+                        id="department"
+                        type="text"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        className="w-full px-4 py-2 bg-[#1A1A2E] border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00BFFF] focus:border-transparent"
+                        placeholder="Enter department"
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
 

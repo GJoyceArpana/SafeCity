@@ -1,0 +1,332 @@
+{
+  "Malleshwaram": {
+    "ward": "Malleshwaram",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 3
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 4
+      }
+    ]
+  },
+  "MG Road": {
+    "ward": "MG Road",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "Koramangala": {
+    "ward": "Koramangala",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "BTM": {
+    "ward": "BTM",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "Jayanagar": {
+    "ward": "Jayanagar",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "Indiranagar": {
+    "ward": "Indiranagar",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 3
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "Electronic City": {
+    "ward": "Electronic City",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "Whitefield": {
+    "ward": "Whitefield",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 4
+      }
+    ]
+  },
+  "Yelahanka": {
+    "ward": "Yelahanka",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 5
+      }
+    ]
+  },
+  "Hebbal": {
+    "ward": "Hebbal",
+    "forecast": [
+      {
+        "date": "2025-11-21",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-22",
+        "predicted_count": 4
+      },
+      {
+        "date": "2025-11-23",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-24",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-25",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-26",
+        "predicted_count": 5
+      },
+      {
+        "date": "2025-11-27",
+        "predicted_count": 4
+      }
+    ]
+  }
+}

@@ -222,6 +222,7 @@ export function PoliceDashboard() {
                 <div className="h-[600px]">
                   <CrimeMap
                     hotspots={hotspots}
+                    userLocation={[12.9716, 77.5946]}
                     incidents={showIncidents ? incidents : []}
                     showIncidents={showIncidents}
                   />

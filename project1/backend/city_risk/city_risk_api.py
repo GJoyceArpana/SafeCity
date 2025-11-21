@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from .city_risk_engine import compute_city_risk_index
 
-# Prefix MUST match your frontend request: /api/cityRisk
-router = APIRouter(prefix="/api", tags=["City Risk"])
+# Router without prefix; main app mounts it at /api so final path is /api/cityRisk
+router = APIRouter(tags=["City Risk"])
 
 
 @router.get("/cityRisk")

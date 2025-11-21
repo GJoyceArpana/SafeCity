@@ -5,6 +5,7 @@ import {
   Marker,
   HeatmapLayer,
   useLoadScript,
+  Circle,
 } from "@react-google-maps/api";
 
 // --------------------------------------------
@@ -117,6 +118,15 @@ export function CrimeMap({ hotspots, userLocation, zoom = 12 }: CrimeMapProps) {
       };
     });
 
+  // Helper for circle color based on intensity
+  const getCircleColor = (intensity?: number) => {
+    const value = intensity ?? 1;
+    if (value >= 75) return "#ff0000"; // Critical
+    if (value >= 50) return "#ff6600"; // High
+    if (value >= 25) return "#ffcc00"; // Moderate
+    return "#00ff88"; // Low
+  };
+
   return (
     <GoogleMap
       zoom={zoom}
@@ -149,6 +159,44 @@ export function CrimeMap({ hotspots, userLocation, zoom = 12 }: CrimeMapProps) {
           }}
         />
       )}
+
+      {/* HOTSPOT CIRCLES (danger areas) */}
+      {hotspots.map((h, idx) => {
+        const lat = h.center?.lat ?? h.lat ?? 0;
+        const lng = h.center?.lng ?? h.lng ?? 0;
+        const raw = h.intensity ?? h.count ?? 1;
+        const color = getCircleColor(raw);
+        const radius = h.radius ?? 150;
+
+        return (
+          <React.Fragment key={h.cluster_id ?? `${idx}-${lat}-${lng}`}>
+            <Circle
+              center={{ lat, lng }}
+              radius={radius}
+              options={{
+                strokeColor: color,
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: color,
+                fillOpacity: 0.18,
+                clickable: false,
+                zIndex: 5,
+              }}
+            />
+
+            {/* Optional danger marker for critical hotspots */}
+            {raw >= 75 && (
+              <Marker
+                position={{ lat, lng }}
+                icon={{
+                  url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                  scaledSize: new google.maps.Size(28, 28),
+                }}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
     </GoogleMap>
   );
 }
