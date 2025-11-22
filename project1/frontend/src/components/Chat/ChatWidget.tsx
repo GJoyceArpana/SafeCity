@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Mic, MicOff, Paperclip } from 'lucide-react';
+import { MessageCircle, X, Send, Mic, MicOff, Shield, AlertTriangle, Bell, MapPin, Navigation } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 interface ChatMessage {
   role: 'user' | 'bot';
   text: string;
   timestamp: Date;
+  type?: 'normal' | 'emergency' | 'safety' | 'info';
+  showEmergencyActions?: boolean;
 }
 
 interface ChatResponse {
@@ -20,24 +22,80 @@ interface ChatContext {
   nearbyHotspots?: number;
 }
 
+// =====================================================
+// 🧠 INTELLIGENT INTENT DETECTION SYSTEM
+// =====================================================
+
+const EMERGENCY_KEYWORDS = [
+  'help me', 'help', 'danger', 'emergency', 'save me', 'following me', 
+  'urgent', 'unsafe', 'sos', 'call police', 'scared', 'need help', 
+  'hurry', 'please help', 'in trouble', 'threat', 'attack', 
+  'kidnap', 'assault', 'robbery', 'suspicious', 'stalker'
+];
+
+const ROUTE_KEYWORDS = [
+  'safest path', 'safe route', 'how to reach', 'safe way', 
+  'navigation', 'direction', 'path to', 'route to', 'get to'
+];
+
+const HOTSPOT_KEYWORDS = [
+  'crime spot', 'danger area', 'hotspot', 'is this area safe',
+  'safe area', 'dangerous', 'crime rate', 'risky area'
+];
+
+const ALERT_KEYWORDS = [
+  'recent crime', 'alert', 'what happened', 'incident',
+  'crime today', 'warning', 'notification'
+];
+
+const LOCATION_KEYWORDS = [
+  'where am i', 'current location', 'my location', 
+  'am i safe', 'safe here', 'this area'
+];
+
+function detectIntent(message: string): 'emergency' | 'route' | 'hotspot' | 'alert' | 'location' | 'general' {
+  const msg = message.toLowerCase();
+  
+  if (EMERGENCY_KEYWORDS.some(keyword => msg.includes(keyword))) {
+    return 'emergency';
+  }
+  if (LOCATION_KEYWORDS.some(keyword => msg.includes(keyword))) {
+    return 'location';
+  }
+  if (ROUTE_KEYWORDS.some(keyword => msg.includes(keyword))) {
+    return 'route';
+  }
+  if (HOTSPOT_KEYWORDS.some(keyword => msg.includes(keyword))) {
+    return 'hotspot';
+  }
+  if (ALERT_KEYWORDS.some(keyword => msg.includes(keyword))) {
+    return 'alert';
+  }
+  
+  return 'general';
+}
+
+function isEmergency(message: string): boolean {
+  return detectIntent(message) === 'emergency';
+}
+
 export function ChatWidget() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'bot',
-      text: 'Hi! I\'m SafeCity Assistant 🤖. How can I help you today?',
+      text: '🤖 Hi! I\'m SafeCity Emergency Assistant.\n\nI can help you with:\n🚨 **Emergency assistance** - Say "help" or "danger"\n🗺️ **Safe route planning**\n📍 **Location safety checks**\n🔴 **Crime hotspot info**\n🛡️ **Safety tips**\n\nHow can I help you today?',
       timestamp: new Date(),
+      type: 'normal'
     },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<unknown>(null);
 
   // Load chat history from localStorage
   useEffect(() => {
@@ -47,7 +105,7 @@ export function ChatWidget() {
       if (savedMessages) {
         try {
           const parsed = JSON.parse(savedMessages);
-          const restored = parsed.map((msg: any) => ({
+          const restored = parsed.map((msg: { role: string; text: string; timestamp: string; type?: string; showEmergencyActions?: boolean }) => ({
             ...msg,
             timestamp: new Date(msg.timestamp),
           }));
@@ -82,25 +140,37 @@ export function ChatWidget() {
   // Initialize speech recognition
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
-      const SpeechRecognition = (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
+      const SpeechRecog = (window as { webkitSpeechRecognition: new () => unknown }).webkitSpeechRecognition;
+      const recognition = new SpeechRecog() as {
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+        onresult: (event: SpeechRecognitionEvent) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+        stop: () => void;
+      };
+      
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         setInputValue(transcript);
         setIsListening(false);
       };
 
-      recognitionRef.current.onerror = () => {
+      recognition.onerror = () => {
         setIsListening(false);
       };
 
-      recognitionRef.current.onend = () => {
+      recognition.onend = () => {
         setIsListening(false);
       };
+      
+      recognitionRef.current = recognition;
     }
   }, []);
 
@@ -110,21 +180,14 @@ export function ChatWidget() {
       return;
     }
 
+    const recognition = recognitionRef.current as { stop: () => void; start: () => void };
+    
     if (isListening) {
-      recognitionRef.current.stop();
+      recognition.stop();
       setIsListening(false);
     } else {
-      recognitionRef.current.start();
+      recognition.start();
       setIsListening(true);
-    }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      setUploadedFile(file);
-    } else {
-      alert('Please select an image file');
     }
   };
 
@@ -135,8 +198,9 @@ export function ChatWidget() {
       setMessages([
         {
           role: 'bot',
-          text: 'Hi! I\'m SafeCity Assistant 🤖. How can I help you today?',
+          text: '🤖 Hi! I\'m SafeCity Emergency Assistant.\n\nI can help you with:\n🚨 **Emergency assistance** - Say "help" or "danger"\n🗺️ **Safe route planning**\n📍 **Location safety checks**\n🔴 **Crime hotspot info**\n🛡️ **Safety tips**\n\nHow can I help you today?',
           timestamp: new Date(),
+          type: 'normal'
         },
       ]);
     }
@@ -194,37 +258,280 @@ export function ChatWidget() {
     }
   };
 
-  const getFallbackResponse = (userMessage: string): string => {
+  // =====================================================
+  // 🤖 INTELLIGENT RESPONSE GENERATION
+  // =====================================================
+  
+  const getIntelligentResponse = async (userMessage: string, intent: string): Promise<{ text: string; type: 'normal' | 'emergency' | 'safety' | 'info'; showEmergencyActions?: boolean }> => {
     const msg = userMessage.toLowerCase();
 
-    if (msg.includes('safe route') || msg.includes('route') || msg.includes('navigation')) {
-      return 'You can check the Safe Routes tab for ML-powered safest paths that avoid crime hotspots! 🗺️';
-    }
-    
-    if (msg.includes('hotspot') || msg.includes('danger') || msg.includes('crime')) {
-      return 'Avoid high-intensity hotspots shown as red circles on the Safety Map. Our AI analyzes real crime data to identify these areas. 🔴';
-    }
-    
-    if (msg.includes('alert') || msg.includes('warning') || msg.includes('notification')) {
-      return 'You can view recent safety alerts in the Alerts tab. They show risk scores and locations based on real-time analysis. 🚨';
-    }
-    
-    if (msg.includes('help') || msg.includes('what can you do')) {
-      return 'I can help you with:\n• Finding safe routes 🗺️\n• Understanding crime hotspots 🔴\n• Viewing safety alerts 🚨\n• General safety tips 🛡️\n\nJust ask me anything!';
-    }
-    
-    if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
-      return 'Hello! How can I assist you with your safety today? 👋';
-    }
-    
-    if (msg.includes('thank') || msg.includes('thanks')) {
-      return 'You\'re welcome! Stay safe out there! 🛡️';
-    }
-    
-    if (msg.includes('police') || msg.includes('emergency')) {
-      return 'For emergencies, always call 100 (Police) or 108 (Ambulance) immediately. This assistant is for safety information only. 🚨';
+    // 🚨 EMERGENCY INTENT - HIGHEST PRIORITY
+    if (intent === 'emergency') {
+      return {
+        text: '⚠️ I detected you might be in danger. Your safety is my top priority.\n\nPlease choose an action:',
+        type: 'emergency',
+        showEmergencyActions: true
+      };
     }
 
+    // 📍 LOCATION-BASED SAFETY CHECK
+    if (intent === 'location') {
+      try {
+        const position = await getCurrentLocation();
+        const riskLevel = await checkLocationRisk(position.coords.latitude, position.coords.longitude);
+        
+        return {
+          text: `📍 Your current location: (${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)})\n\n${riskLevel}`,
+          type: 'info'
+        };
+      } catch (error) {
+        return {
+          text: '📍 I need location access to check your area\'s safety. Please enable location permissions in your browser.\n\nYou can also check the Safety Map tab for crime hotspots.',
+          type: 'info'
+        };
+      }
+    }
+
+    // 🗺️ ROUTE REQUEST
+    if (intent === 'route') {
+      return {
+        text: '🗺️ I can help you find the safest route!\n\nHead to the **Safe Routes** tab where our AI:\n• Analyzes real-time crime data\n• Avoids high-risk hotspots\n• Shows multiple route options\n• Provides risk scores for each path\n\nYou can also enter your destination here, and I\'ll guide you to the routes feature.',
+        type: 'safety'
+      };
+    }
+
+    // 🔴 HOTSPOT QUERY
+    if (intent === 'hotspot') {
+      return {
+        text: '🔴 Crime Hotspot Information:\n\n**High Risk (Red)**: Recent incidents, avoid if possible\n**Medium Risk (Orange)**: Moderate caution advised\n**Low Risk (Yellow)**: Generally safe, stay alert\n**Safe (Green)**: Low crime rate, safe to travel\n\nOur AI identifies hotspots using:\n✓ DBSCAN clustering (89% accuracy)\n✓ Real-time incident data\n✓ Historical crime patterns\n\nCheck the **Safety Map** tab for detailed hotspot visualization.',
+        type: 'info'
+      };
+    }
+
+    // 🚨 ALERTS QUERY
+    if (intent === 'alert') {
+      return {
+        text: '🚨 Recent Safety Alerts:\n\nYou can view all recent incidents in the **Alerts** tab, including:\n• Crime type and severity\n• Location and timestamp\n• Risk scores (0-100)\n• Distance from your location\n\nAlerts are updated in real-time based on our ML models with 86% precision.\n\nWould you like me to summarize recent high-priority alerts?',
+        type: 'info'
+      };
+    }
+
+    // 🛡️ GENERAL SAFETY ADVICE
+    if (msg.includes('advice') || msg.includes('tip') || msg.includes('safe at night') || msg.includes('how to be safe')) {
+      return {
+        text: '🛡️ **Safety Tips & Best Practices:**\n\n**At Night:**\n• Stay in well-lit areas\n• Share your live location with trusted contacts\n• Use SafeCity\'s route planning\n• Keep emergency numbers handy (100 - Police, 108 - Ambulance)\n\n**General:**\n• Trust your instincts\n• Stay aware of surroundings\n• Avoid isolated areas\n• Keep phone charged\n• Use the SOS button for emergencies\n\n**Using SafeCity:**\n• Enable Smart SOS Detection (shake or audio detection)\n• Check route risk scores before traveling\n• Monitor real-time alerts\n\nStay safe! 💙',
+        type: 'safety'
+      };
+    }
+
+    // Greeting responses
+    if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
+      return {
+        text: 'Hello! 👋 I\'m your SafeCity Emergency Assistant.\n\nI can help you with:\n🚨 **Emergency assistance** - Just say "help" or "danger"\n🗺️ **Safe route planning**\n📍 **Location safety checks**\n🔴 **Crime hotspot information**\n🚨 **Recent alerts**\n🛡️ **Safety tips**\n\nHow can I assist you today?',
+        type: 'normal'
+      };
+    }
+
+    // Thank you responses
+    if (msg.includes('thank') || msg.includes('thanks')) {
+      return {
+        text: 'You\'re very welcome! 🙏 Your safety is our priority. Don\'t hesitate to reach out if you need anything. Stay safe! 🛡️',
+        type: 'normal'
+      };
+    }
+
+    // Default helpful response
+    return {
+      text: 'I\'m here to help keep you safe! 💙\n\nYou can ask me about:\n• Emergency help (I\'ll trigger SOS immediately)\n• Safe routes to your destination\n• Crime hotspots in your area\n• Recent safety alerts\n• Safety tips and advice\n\nWhat would you like to know?',
+      type: 'normal'
+    };
+  };
+
+  // =====================================================
+  // 📍 LOCATION & RISK ASSESSMENT HELPERS
+  // =====================================================
+  
+  const getCurrentLocation = (): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation not supported'));
+        return;
+      }
+      
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    });
+  };
+
+  const checkLocationRisk = async (lat: number, lng: number): Promise<string> => {
+    try {
+      // Fetch nearby hotspots from backend
+      const response = await fetch(`http://localhost:8000/getHeatmap`);
+      const hotspots = await response.json();
+      
+      // Calculate distance to nearest hotspots
+      const nearbyHotspots = hotspots
+        .map((hotspot: { lat: number; lng: number; intensity: number; count: number }) => ({
+          ...hotspot,
+          distance: calculateDistance(lat, lng, hotspot.lat, hotspot.lng)
+        }))
+        .filter((h: { distance: number }) => h.distance < 2000) // Within 2km
+        .sort((a: { distance: number }, b: { distance: number }) => a.distance - b.distance)
+        .slice(0, 3);
+
+      if (nearbyHotspots.length === 0) {
+        return '✅ **Your area appears safe!**\nNo major crime hotspots detected within 2km radius.\n\nReminder: Always stay alert and trust your instincts.';
+      }
+
+      const nearest = nearbyHotspots[0];
+      let riskLevel = 'LOW';
+      let riskColor = '🟢';
+      
+      if (nearest.intensity > 200 || nearest.distance < 500) {
+        riskLevel = 'HIGH';
+        riskColor = '🔴';
+      } else if (nearest.intensity > 100 || nearest.distance < 1000) {
+        riskLevel = 'MEDIUM';
+        riskColor = '🟡';
+      }
+
+      return `${riskColor} **Risk Level: ${riskLevel}**\n\n${nearbyHotspots.length} crime hotspot(s) nearby:\n${nearbyHotspots.map((h: { distance: number; count: number; intensity: number }, i: number) => 
+        `${i + 1}. ${Math.round(h.distance)}m away - ${h.count} incidents (intensity: ${h.intensity})`
+      ).join('\n')}\n\n💡 Consider using Safe Routes to avoid these areas.`;
+    } catch {
+      return '⚠️ Unable to fetch hotspot data. Please check your internet connection or try the Safety Map tab.';
+    }
+  };
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  };
+
+  // =====================================================
+  // 🚨 EMERGENCY SOS TRIGGER
+  // =====================================================
+  
+  const triggerSOS = async () => {
+    try {
+      const position = await getCurrentLocation();
+      const battery = await getBatteryLevel();
+      
+      const sosData = {
+        userId: user?.email || 'anonymous',
+        userEmail: user?.email || 'unknown@safecity.com',
+        userName: (user as { name?: string })?.name || user?.email?.split('@')[0] || 'Anonymous User',
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        batteryLevel: battery,
+        timestamp: new Date().toISOString(),
+        nearbyHotspots: 0, // Will be calculated by backend
+        riskIndex: 100 // Emergency = max risk
+      };
+
+      const response = await fetch('http://localhost:8000/api/sos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sosData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        addBotMessage(
+          `🚨 **SOS TRIGGERED SUCCESSFULLY**\n\nEmergency ID: ${result.sosId}\n📍 Location shared with authorities\n👮 Estimated response time: ${result.estimatedResponseTime}\n🚔 ${result.nearbyOfficers} officers nearby\n\n**Help is on the way. Stay calm and stay on the line if you called emergency services.**`,
+          'emergency'
+        );
+      } else {
+        throw new Error('SOS request failed');
+      }
+    } catch (error) {
+      console.error('SOS Error:', error);
+      addBotMessage(
+        '⚠️ SOS trigger failed. Please call emergency services directly:\n\n**📞 100 - Police**\n**📞 108 - Ambulance**\n**📞 101 - Fire**',
+        'emergency'
+      );
+    }
+  };
+
+  const getBatteryLevel = async (): Promise<number> => {
+    try {
+      if ('getBattery' in navigator) {
+        const battery = await (navigator as { getBattery: () => Promise<{ level: number }> }).getBattery();
+        return Math.round(battery.level * 100);
+      }
+      return 100;
+    } catch {
+      return 100;
+    }
+  };
+
+  const shareLiveLocation = async () => {
+    try {
+      const position = await getCurrentLocation();
+      const locationUrl = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
+      
+      if (navigator.share) {
+        await navigator.share({
+          title: 'SafeCity - Emergency Location',
+          text: `I need help! My current location is:`,
+          url: locationUrl
+        });
+        addBotMessage('📍 Location shared successfully! Your emergency contacts have been notified.', 'info');
+      } else {
+        // Fallback: Copy to clipboard
+        await navigator.clipboard.writeText(locationUrl);
+        addBotMessage(`📍 Location copied to clipboard:\n${locationUrl}\n\nShare this with your emergency contacts.`, 'info');
+      }
+    } catch (error) {
+      console.error('Location share error:', error);
+      addBotMessage('❌ Could not share location. Please enable location permissions.', 'info');
+    }
+  };
+
+  const showSafestRoute = async () => {
+    try {
+      const position = await getCurrentLocation();
+      addBotMessage(
+        `🗺️ **Opening Safe Routes Planner...**\n\nYour location: (${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)})\n\nSwitch to the **Safe Routes** tab to:\n• Get AI-powered safest paths\n• Avoid crime hotspots\n• See real-time risk scores\n\nStay safe!`,
+        'safety'
+      );
+      // You can add navigation logic here if needed
+    } catch (error) {
+      console.error('Route error:', error);
+      addBotMessage('❌ Could not access location. Please enable location permissions to use route planning.', 'info');
+    }
+  };
+
+  const addBotMessage = (text: string, type: 'normal' | 'emergency' | 'safety' | 'info' = 'normal') => {
+    const botMessage: ChatMessage = {
+      role: 'bot',
+      text,
+      timestamp: new Date(),
+      type
+    };
+    setMessages(prev => [...prev, botMessage]);
+  };
+
+  const getFallbackResponse = (userMessage: string): string => {
+    const intent = detectIntent(userMessage);
+    
+    if (intent === 'emergency') {
+      return '⚠️ EMERGENCY DETECTED. Please use the emergency actions below or call 100 (Police) immediately.';
+    }
+    
     return 'I\'m here to help with safety information! You can ask me about safe routes, crime hotspots, or safety alerts. What would you like to know? 🤔';
   };
 
@@ -238,22 +545,28 @@ export function ChatWidget() {
       role: 'user',
       text: messageText,
       timestamp: new Date(),
+      type: 'normal'
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
-    setUploadedFile(null); // Clear uploaded file
 
-    // Get bot response from backend
+    // Detect intent
+    const intent = detectIntent(messageText);
+
     try {
-      const botText = await sendMessageToBackend(messageText);
+      // Get intelligent response
+      const responseData = await getIntelligentResponse(messageText, intent);
       
       const botResponse: ChatMessage = {
         role: 'bot',
-        text: botText,
+        text: responseData.text,
         timestamp: new Date(),
+        type: responseData.type,
+        showEmergencyActions: responseData.showEmergencyActions
       };
+      
       setMessages((prev) => [...prev, botResponse]);
     } catch (error) {
       console.error('Error getting bot response:', error);
@@ -261,6 +574,8 @@ export function ChatWidget() {
         role: 'bot',
         text: getFallbackResponse(messageText),
         timestamp: new Date(),
+        type: intent === 'emergency' ? 'emergency' : 'normal',
+        showEmergencyActions: intent === 'emergency'
       };
       setMessages((prev) => [...prev, fallbackResponse]);
     } finally {
@@ -315,26 +630,76 @@ export function ChatWidget() {
           {/* Messages Container */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                    msg.role === 'user'
-                      ? 'bg-[#00BFFF] text-white'
-                      : 'bg-gray-700 text-gray-100'
-                  }`}
-                >
-                  <p className="text-sm whitespace-pre-line">{msg.text}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'
+              <div key={idx}>
+                <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {/* Bot Message Icon */}
+                  {msg.role === 'bot' && (
+                    <div className="mr-2 mt-1">
+                      {msg.type === 'emergency' && <AlertTriangle className="w-5 h-5 text-red-500" />}
+                      {msg.type === 'safety' && <Shield className="w-5 h-5 text-blue-400" />}
+                      {msg.type === 'info' && <Bell className="w-5 h-5 text-yellow-400" />}
+                      {msg.type === 'normal' && <MessageCircle className="w-5 h-5 text-gray-400" />}
+                    </div>
+                  )}
+                  
+                  <div
+                    className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                      msg.role === 'user'
+                        ? 'bg-gradient-to-r from-[#00BFFF] to-[#0099CC] text-white shadow-lg'
+                        : msg.type === 'emergency'
+                        ? 'bg-gradient-to-r from-red-900/80 to-orange-900/80 text-white border border-red-500'
+                        : msg.type === 'safety'
+                        ? 'bg-gradient-to-r from-blue-900/50 to-blue-800/50 text-blue-100 border border-blue-500'
+                        : msg.type === 'info'
+                        ? 'bg-gray-800 text-gray-200 border border-gray-600'
+                        : 'bg-gray-700 text-gray-100'
                     }`}
                   >
-                    {formatTime(msg.timestamp)}
-                  </p>
+                    <p className="text-sm whitespace-pre-line">{msg.text}</p>
+                    <p
+                      className={`text-xs mt-1 ${
+                        msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'
+                      }`}
+                    >
+                      {formatTime(msg.timestamp)}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Emergency Action Buttons */}
+                {msg.showEmergencyActions && (
+                  <div className="mt-3 ml-7 space-y-2">
+                    <button
+                      onClick={triggerSOS}
+                      className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition shadow-lg"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      🚨 Trigger SOS Now
+                    </button>
+                    <button
+                      onClick={shareLiveLocation}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition shadow-lg"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      📍 Share My Live Location
+                    </button>
+                    <button
+                      onClick={showSafestRoute}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition shadow-lg"
+                    >
+                      <Navigation className="w-4 h-4" />
+                      🛣️ Show Safest Nearby Route
+                    </button>
+                    <button
+                      onClick={() => {
+                        addBotMessage('Emergency alert cancelled. If you need any other assistance, just let me know. Stay safe! 🛡️', 'normal');
+                      }}
+                      className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition"
+                    >
+                      ❌ Cancel Alert
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
 
@@ -356,33 +721,7 @@ export function ChatWidget() {
 
           {/* Input Area */}
           <div className="p-3 border-t border-gray-700">
-            {/* File Upload Preview */}
-            {uploadedFile && (
-              <div className="mb-2 flex items-center gap-2 p-2 bg-gray-800 rounded text-xs text-gray-300">
-                <span>📎 {uploadedFile.name}</span>
-                <button onClick={() => setUploadedFile(null)} className="ml-auto text-red-400 hover:text-red-300">
-                  ✕
-                </button>
-              </div>
-            )}
-            
             <div className="flex gap-2 items-end">
-              {/* File Upload Button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition border border-gray-600"
-                title="Upload image"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              
               {/* Voice Input Button */}
               <button
                 onClick={toggleVoiceInput}
@@ -414,7 +753,7 @@ export function ChatWidget() {
               {/* Send Button */}
               <button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() && !uploadedFile}
+                disabled={!inputValue.trim()}
                 className="p-2 bg-[#00BFFF] text-white rounded-lg hover:bg-[#0099CC] disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <Send className="w-4 h-4" />

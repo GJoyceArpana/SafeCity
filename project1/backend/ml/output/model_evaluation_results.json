@@ -1,0 +1,29 @@
+{
+  "evaluation_date": "2025-11-22 09:10:51",
+  "dataset": {
+    "total_incidents": 12000,
+    "date_range": "2025-03-25 00:00:00 to 2025-11-20 00:00:00"
+  },
+  "forecast_model": {
+    "mae": 5.7,
+    "rmse": 7.20256001351598,
+    "mape": 10.709711055126983,
+    "accuracy_percent": 89.29028894487301
+  },
+  "clustering_model": {
+    "n_clusters": 1,
+    "n_noise": 0,
+    "noise_percent": 0.0,
+    "silhouette_score": null,
+    "parameters": {
+      "eps": 0.0035,
+      "min_samples": 8
+    }
+  },
+  "risk_score_model": {
+    "mean_score": 66.17375,
+    "median_score": 67.0,
+    "high_risk_count": 5063,
+    "precision": 0.8629271183093028
+  }
+}

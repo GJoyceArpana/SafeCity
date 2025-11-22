@@ -12,12 +12,16 @@ from typing import List, Tuple, Dict, Any, Optional
 # ---------------------------
 GRID_STEP = 0.001   # each step in degrees (~111m at equator). Tune for perf/quality.
 HOTSPOT_FILE = "data/hotspots.json"
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")  # Set this in environment
+# Try environment variable first, fallback to frontend key (note: frontend key is referer-restricted)
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyDshzrYif92kFPNcjkDNk1lxJboCO8EQX8")
 USE_GOOGLE_DIRECTIONS = True  # Toggle to use Google Maps API vs grid-based A*
 
 # Debug logging
-print(f"🔑 Google Maps API Key configured: {bool(GOOGLE_MAPS_API_KEY)}")
-print(f"🗺️  Using Google Directions: {USE_GOOGLE_DIRECTIONS}")
+if GOOGLE_MAPS_API_KEY:
+    print(f"🔑 Google Maps API Key: ...{GOOGLE_MAPS_API_KEY[-8:]}")
+    print(f"🗺️  Using Google Directions: {USE_GOOGLE_DIRECTIONS}")
+else:
+    print("⚠️  No Google Maps API key - will use grid-based A* algorithm")
 
 
 # ---------------------------
@@ -231,12 +235,19 @@ def get_google_directions_routes(start_lat: float, start_lng: float, end_lat: fl
         
         if response.status_code != 200:
             print(f"❌ Google API HTTP error: {response.status_code}")
+            print("💡 Tip: Check if API key has IP restrictions or billing enabled")
             return []
         
         data = response.json()
         
         if data.get("status") != "OK":
-            print(f"❌ Google API error: {data.get('status')} - {data.get('error_message', '')}")
+            error_msg = data.get('error_message', '')
+            status = data.get('status')
+            print(f"❌ Google API error: {status}")
+            if error_msg:
+                print(f"   Details: {error_msg}")
+            if status == "REQUEST_DENIED":
+                print("💡 API key may have referer restrictions - use unrestricted key for backend")
             return []
         
         print(f"✅ Got {len(data.get('routes', []))} routes from Google")
@@ -402,7 +413,7 @@ def compute_safe_path(start_lat: float, start_lng: float, end_lat: float, end_ln
                 }
     
     # Fallback to grid-based A* if Google Maps unavailable
-    print("⚠️  Falling back to grid-based A* algorithm...")
+    print("🔄 Using intelligent grid-based A* pathfinding (crime-aware routing)...")
     start = (round(start_lat, 6), round(start_lng, 6))
     end = (round(end_lat, 6), round(end_lng, 6))
 
@@ -427,6 +438,8 @@ def compute_safe_path(start_lat: float, start_lng: float, end_lat: float, end_ln
 
     # basic risk estimate (placeholder): count hotspots with high intensity near route
     risk_score, avoided = calculate_route_risk(path_points, hotspots)
+    
+    print(f"✅ A* route computed: {len(path_points)} waypoints, risk={risk_score}, avoided={avoided} hotspots\n")
 
     return {
         "polyline": poly,

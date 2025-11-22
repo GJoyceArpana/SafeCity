@@ -3,22 +3,30 @@ import { X, AlertTriangle, MapPin, User, Phone, Battery, Shield } from 'lucide-r
 import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSmartSOS } from '../../hooks/useSmartSOS';
+import { getNearestHotspotsCount } from '../../utils/getNearestHotspots';
 
 interface SOSModalProps {
   onClose: () => void;
 }
 
-interface Guardian {
-  id: string;
+interface EmergencyContact {
   name: string;
   phone: string;
   relationship: string;
 }
 
-const mockGuardians: Guardian[] = [
-  { id: '1', name: 'John Doe', phone: '+91 98765 43210', relationship: 'Father' },
-  { id: '2', name: 'Jane Smith', phone: '+91 98765 43211', relationship: 'Mother' },
-  { id: '3', name: 'Emergency Contact', phone: '100', relationship: 'Police' },
+interface Hotspot {
+  lat: number;
+  lng: number;
+  riskScore?: number;
+  crimeCount?: number;
+}
+
+// Default emergency contacts if user hasn't added any
+const DEFAULT_CONTACTS: EmergencyContact[] = [
+  { name: 'Emergency Services', phone: '112', relationship: 'Emergency' },
+  { name: 'Police', phone: '100', relationship: 'Police' },
+  { name: 'Women Helpline', phone: '1091', relationship: 'Women Safety' },
 ];
 
 const mapContainerStyle = {
@@ -34,10 +42,67 @@ export function SOSModal({ onClose }: SOSModalProps) {
   const [smartSOSEnabled, setSmartSOSEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>(DEFAULT_CONTACTS);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [cityRisk, setCityRisk] = useState<number>(0);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
   });
+
+  // Fetch hotspots
+  useEffect(() => {
+    const fetchHotspots = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/hotspots');
+        const data = await response.json();
+        if (data.hotspots) {
+          setHotspots(data.hotspots);
+        }
+      } catch (error) {
+        console.error('Error fetching hotspots:', error);
+      }
+    };
+    fetchHotspots();
+  }, []);
+
+  // Fetch city risk
+  useEffect(() => {
+    const fetchCityRisk = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/cityRisk');
+        const data = await response.json();
+        if (data.riskIndex !== undefined) {
+          setCityRisk(data.riskIndex);
+        }
+      } catch (error) {
+        console.error('Error fetching city risk:', error);
+      }
+    };
+    fetchCityRisk();
+  }, []);
+
+  // Fetch user's emergency contacts from Firestore
+  useEffect(() => {
+    const fetchEmergencyContacts = async () => {
+      if (!user?.email) return;
+
+      try {
+        const response = await fetch(`http://localhost:8000/api/user/${user.email}`);
+        const userData = await response.json();
+        
+        if (userData.emergencyContacts && userData.emergencyContacts.length > 0) {
+          setEmergencyContacts(userData.emergencyContacts);
+        }
+        // Otherwise keep DEFAULT_CONTACTS
+      } catch (error) {
+        console.error('Error fetching emergency contacts:', error);
+        // Keep DEFAULT_CONTACTS on error
+      }
+    };
+
+    fetchEmergencyContacts();
+  }, [user]);
 
   // Handle SOS Send
   const handleSendSOS = async () => {
@@ -50,17 +115,28 @@ export function SOSModal({ onClose }: SOSModalProps) {
     setMessage('');
 
     try {
+      // Calculate nearby hotspots
+      const nearbyHotspots = getNearestHotspotsCount(
+        location.lat,
+        location.lng,
+        hotspots,
+        500 // 500m radius
+      );
+
       const sosData = {
-        userId: user?.id || 'anonymous',
-        userEmail: user?.email,
-        userName: user?.fullName,
+        userId: user?.id || user?.email || 'anonymous',
+        userEmail: user?.email || 'anonymous@safecity.com',
+        userName: user?.fullName || 'Anonymous User',
         lat: location.lat,
         lng: location.lng,
-        batteryLevel,
+        battery: batteryLevel,
         timestamp: new Date().toISOString(),
-        nearbyHotspots: [],
-        riskIndex: 0,
+        nearbyHotspots,
+        cityRisk,
+        message: 'Emergency - User in distress',
       };
+
+      console.log('📤 Sending SOS:', sosData);
 
       const response = await fetch('http://localhost:8000/api/sos', {
         method: 'POST',
@@ -74,18 +150,25 @@ export function SOSModal({ onClose }: SOSModalProps) {
         throw new Error('Failed to send SOS');
       }
 
-      await response.json();
-      setMessage('✅ SOS sent successfully! Help is on the way.');
+      const result = await response.json();
+      console.log('✅ SOS Response:', result);
+      
+      setMessage(`🚨 SOS successfully sent!\n\nHelp is on the way.\nEstimated arrival: ${result.estimatedResponseTime || '5-8 minutes'}\nNearby officers: ${result.nearbyOfficers || 'Multiple units'}`);
       
       setTimeout(() => {
         onClose();
-      }, 3000);
+      }, 5000);
     } catch (error) {
-      console.error('SOS Error:', error);
+      console.error('❌ SOS Error:', error);
       setMessage('❌ Failed to send SOS. Please try again or call emergency services directly.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Call emergency contact
+  const callContact = (phone: string) => {
+    window.location.href = `tel:${phone}`;
   };
 
   // Smart SOS Detection
@@ -115,6 +198,7 @@ export function SOSModal({ onClose }: SOSModalProps) {
 
     // Get battery level if supported
     if ('getBattery' in navigator) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (navigator as any).getBattery().then((battery: any) => {
         setBatteryLevel(Math.round(battery.level * 100));
       });
@@ -216,9 +300,9 @@ export function SOSModal({ onClose }: SOSModalProps) {
               Emergency Contacts
             </h3>
             <div className="space-y-2">
-              {mockGuardians.map((guardian) => (
+              {emergencyContacts.map((contact, index) => (
                 <div
-                  key={guardian.id}
+                  key={`contact-${index}`}
                   className="flex items-center justify-between p-3 bg-[#1A1A2E] rounded-lg hover:bg-[#1A1A2E]/80 transition-colors"
                 >
                   <div className="flex items-center gap-3">
@@ -226,14 +310,17 @@ export function SOSModal({ onClose }: SOSModalProps) {
                       <User className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-white text-sm font-medium">{guardian.name}</p>
-                      <p className="text-gray-400 text-xs">{guardian.relationship}</p>
+                      <p className="text-white text-sm font-medium">{contact.name}</p>
+                      <p className="text-gray-400 text-xs">{contact.relationship}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-400 text-sm">
+                  <button
+                    onClick={() => callContact(contact.phone)}
+                    className="flex items-center gap-2 text-gray-400 hover:text-white text-sm bg-blue-600/20 hover:bg-blue-600/30 px-3 py-2 rounded-lg transition-colors"
+                  >
                     <Phone className="w-4 h-4" />
-                    {guardian.phone}
-                  </div>
+                    {contact.phone}
+                  </button>
                 </div>
               ))}
             </div>

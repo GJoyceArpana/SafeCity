@@ -272,6 +272,18 @@ export default function SafeRoutes({ userLocation, hotspots: externalHotspots }:
 
       console.log(`📍 Route from: ${oCoords.lat}, ${oCoords.lng} to ${dCoords.lat}, ${dCoords.lng}`);
 
+      // Validate distance (A* algorithm works best for local routes < 50km)
+      const distance = google.maps.geometry.spherical.computeDistanceBetween(
+        new google.maps.LatLng(oCoords.lat, oCoords.lng),
+        new google.maps.LatLng(dCoords.lat, dCoords.lng)
+      );
+      const distanceKm = distance / 1000;
+      console.log(`📏 Distance: ${distanceKm.toFixed(2)} km`);
+
+      if (distanceKm > 100) {
+        alert(`⚠️ Distance is ${distanceKm.toFixed(0)}km.\n\nSafeCity is optimized for local routes (< 100km).\nFor long distances, only Google Maps route will be available.`);
+      }
+
       // 2. Fetch Google Directions (for recommended route and alternatives)
       const directionsService = new google.maps.DirectionsService();
       const googleResult = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
@@ -307,11 +319,18 @@ export default function SafeRoutes({ userLocation, hotspots: externalHotspots }:
 
       // 4. Call Backend Safe Route (A* path) with fallback to safest Google route
       let backendPoints: RoutePoint[] = [];
-      try {
-        backendPoints = await callBackendSafeRoute(oCoords, dCoords);
-      } catch (err) {
-        console.error("Backend safe route failed, falling back to safest Google route:", err);
+      
+      // Only call backend A* for local routes (< 50km)
+      if (distanceKm <= 50) {
+        try {
+          backendPoints = await callBackendSafeRoute(oCoords, dCoords);
+        } catch (err) {
+          console.error("Backend safe route failed, falling back to safest Google route:", err);
+        }
+      } else {
+        console.log(`⏩ Skipping backend A* (distance ${distanceKm.toFixed(0)}km > 50km limit)`);
       }
+      
       // Smooth whichever path we will render
       const chosen = backendPoints && backendPoints.length > 1 ? backendPoints : safestGooglePath;
       console.log(`🛣️ Route chosen: ${backendPoints.length > 1 ? 'Backend A*' : 'Google Fallback'} with ${chosen.length} waypoints`);
@@ -320,16 +339,21 @@ export default function SafeRoutes({ userLocation, hotspots: externalHotspots }:
       setSafeRoute(smoothed);
 
       // 5. Fit map bounds
-      if (mapRef.current) {
-        const bounds = new google.maps.LatLngBounds();
-        bounds.extend(new google.maps.LatLng(oCoords.lat, oCoords.lng));
-        bounds.extend(new google.maps.LatLng(dCoords.lat, dCoords.lng));
-        mapRef.current.fitBounds(bounds);
+      if (mapRef.current && oCoords && dCoords) {
+        try {
+          const bounds = new google.maps.LatLngBounds();
+          bounds.extend(new google.maps.LatLng(oCoords.lat, oCoords.lng));
+          bounds.extend(new google.maps.LatLng(dCoords.lat, dCoords.lng));
+          mapRef.current.fitBounds(bounds);
+        } catch (boundsErr) {
+          console.warn("Could not fit bounds, using default zoom:", boundsErr);
+        }
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Routing flow error:", err);
-      alert("Routing Error: " + (err.message || "Failed to compute route"));
+      const errorMsg = err instanceof Error ? err.message : "Failed to compute route";
+      alert(`Route Calculation Error\n\n${errorMsg}\n\nPlease try again or choose different locations.`);
     } finally {
       setLoadingRoute(false);
     }

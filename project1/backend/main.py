@@ -11,7 +11,7 @@ from api.services.ml_service import get_heatmap, get_predictions, get_risk_score
 from routing.safe_route_api import router as safe_route_router
 from city_risk.city_risk_api import router as city_risk_router
 from routes.chat import router as chat_router
-from routes.sos import router as sos_router
+from sos.sos_api import router as sos_router
 
 # ML Data Validation
 from ml_data_validator import validate_ml_data_sources
