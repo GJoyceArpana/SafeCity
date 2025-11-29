@@ -1,0 +1,13 @@
+This is a placeholder file. Please replace this with an actual SOS alarm MP3 audio file.
+You can use a free alarm sound from:
+- https://freesound.org/
+- https://mixkit.co/free-sound-effects/alarm/
+- Or generate one using online tone generators
+
+The audio file should be:
+- Format: MP3
+- Duration: 2-5 seconds (will loop if needed)
+- Volume: Moderately loud alarm/siren sound
+- Suggested frequency: 800-1200 Hz alternating tones
+
+If no audio file is provided, the system will fall back to a browser-generated beep sound using Web Audio API.

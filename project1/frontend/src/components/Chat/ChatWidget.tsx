@@ -158,7 +158,18 @@ export function ChatWidget() {
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
-        setInputValue(transcript);
+        
+        // Only process SOS-related keywords
+        const sosKeywords = ['help', 'danger', 'emergency', 'sos', 'urgent', 'save me', 'police', 'scared', 'unsafe', 'threat', 'attack'];
+        const lowerTranscript = transcript.toLowerCase();
+        const containsSOS = sosKeywords.some(keyword => lowerTranscript.includes(keyword));
+        
+        if (containsSOS) {
+          setInputValue(transcript);
+        } else {
+          // Ignore non-SOS transcripts
+          console.log('⚠️ Voice input ignored (not SOS-related):', transcript);
+        }
         setIsListening(false);
       };
 
